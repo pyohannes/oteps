@@ -1,4 +1,4 @@
-# Stabilizing messaging semantic conventions for tracing
+2# Stabilizing messaging semantic conventions for tracing
 
 This document aims to describe the necessary changes for bringing the [existing semantic conventions for messaging](https://github.com/open-telemetry/opentelemetry-specification/blob/a1a8676a43dce6a4e447f65518aef8e98784306c/specification/trace/semantic_conventions/messaging.md)
 from the current [experimental](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/versioning-and-stability.md#experimental)
@@ -335,44 +335,57 @@ linked traces without the need of additional semantic hints.
 
 #### Attributes
 
-Attribute             | Type   | Requirement Level
-----------------------|--------|---------
-[`messaging.system`](#messagingsystem) | string | Required
-[`messaging.operation`](#messagingoperation) | string | Required
-[`messaging.destination.name`](#messagingdestinationname) | string | For producer spans
-[`messaging.destination.template`](#messagingdestinationtemplate) | string | No
-[`messaging.destination.kind`](#messagingdestinationkind) | string | No
-[`messaging.destination.temporary`](#messagingdestinationtemporary) | boolean | Recommended to be added and set to true if, and only if, the destination is temporary
-[`messaging.destination.anonymous`](#messagingdestinationanonymous) | boolean | Recommended to be added and set to true if, and only if, the destination is anonymous
-[`messaging.source.name`](#messagingsourcename) | string | For consumer spans
-[`messaging.source.template`](#messagingsourcetemplate) | string | No
-[`messaging.source.kind`](#messagingsourcekind) | string | No
-[`messaging.source.temporary`](#messagingsourcetemporary) | string | No
-[`messaging.source.anonymous`](#messagingsourceanonymous) | string | No
-[`net.app.protocol.name`](#netappprotocolname) | string | No
-[`net.app.protocol.version`](#netappprotocolversion) | string | No
-[`net.peer.ip`](#netpeerip) | string | No
-[`net.peer.name`](#netpeername) | string | No
+##### Common
 
-##### `messaging.system`
+<!-- semconv messaging.common -->
+| Attribute  | Type | Description  | Examples  | Requirement Level |
+|---|---|---|---|---|
+| [`net.app.protocol.name`](span-general.md) | string | Application layer protocol used. The value SHOULD be normalized to lowercase. | `amqp`; `http`; `mqtt` | Recommended |
+| [`net.app.protocol.version`](span-general.md) | string | Version of the application layer protocol used. See note below. [1] | `3.1.1` | Recommended |
+| [`net.peer.name`](span-general.md) | string | Logical remote hostname, see note below. [2] | `example.com` | Conditionally Required: [3] |
+| [`net.peer.port`](span-general.md) | int | Logical remote port number [4] | `80`; `8080`; `443` | Conditionally Required: [5] |
+| [`net.sock.family`](span-general.md) | string | Protocol [address family](https://man7.org/linux/man-pages/man7/address_families.7.html) which is used for communication. | `inet6`; `bluetooth` | Conditionally Required: [6] |
+| [`net.sock.peer.addr`](span-general.md) | string | Remote socket peer address: IPv4 or IPv6 for internet protocols, path for local communication, [etc](https://man7.org/linux/man-pages/man7/address_families.7.html). | `127.0.0.1`; `/tmp/mysql.sock` | Recommended |
+| [`net.sock.peer.name`](span-general.md) | string | Remote socket peer name. | `proxy.example.com` | Recommended: [7] |
+| [`net.sock.peer.port`](span-general.md) | int | Remote socket peer port. | `16456` | Recommended: [8] |
 
-A string identifying the messaging broker or intermediary, e. g. `kafka`,
-`rabbitmq`, `rocketmq`, `AzureEventHubs`, or `AmazonSQS`.
+**[1]:** `net.app.protocol.version` refers to the version of the protocol used and might be different from the protocol client's version. If the HTTP client used has a version of `0.27.2`, but sends HTTP version `1.1`, this attribute should be set to `1.1`.
 
-If the messaging broker or intermediary are not known, this should be set to a
-value that best identifies the usage scenario. This could be the messaging
-library used (e. g. `jms`), or the protocol used (e. g. `amqp`).
+**[2]:** This should be the hostname of the broker this specific operation is performed for.
 
-A list of recommended values will be provided independently of the messaging
-semantic conventions document.
+**[3]:** If available and not explicitly disabled by users.
 
-##### `messaging.operation`
+**[4]:** This should be the port of the broker this specific operation is performed for.
 
-This attribute should be set to one of the [pre-defined operation names](#operation-names).
+**[5]:** If available, if not default for the network protocol used and not explicitly disabled by users.
 
-##### `messaging.destination.name`
+**[6]:** If different than `inet` and if any of `net.sock.peer.addr` or `net.sock.host.addr` are set. Consumers of telemetry SHOULD accept both IPv4 and IPv6 formats for the address in `net.sock.peer.addr` if `net.sock.family` is not set. This is to support instrumentations that follow previous versions of this document.
 
-The destination name defines name of the target of a message, as it is
+**[7]:** If different than `net.peer.name` and if `net.sock.peer.addr` is set.
+
+**[8]:** If defined for the address family and if different than `net.peer.port` and if `net.sock.peer.addr` is set.
+<!-- endsemconv -->
+
+##### Producer
+
+**Create**
+<!-- semconv messaging.create -->
+<!-- endsemconv -->
+
+(no attributes)
+
+**Publish**
+
+<!-- semconv messaging.publish -->
+| Attribute  | Type | Description  | Examples  | Requirement Level |
+|---|---|---|---|---|
+| `messaging.destination.name` | string | A string identifying queue, topic, or other entity name within broker [1] | `MyQueue`; `MyTopic` | Conditionally Required: [2] |
+| `messaging.destination.kind` | string | The kind of message destination [3] | `queue` | Conditionally Required: [4] |
+| `messaging.destination.template` | string | Low cardinality field representing messaging destination [5] | `/customers/{customerId}` | Conditionally Required: when available |
+| `messaging.destination.temporary` | boolean | denotes that the destination is a temporary destination and might not exist anymore after messages are processed |  | Recommended: [6] |
+| `messaging.destination.anonymous` | boolean | denotes that the destination is an anonymous destination (could be unnamed or have auto-generated name) [7] |  | Recommended: [8] |
+
+**[1]:** The destination name defines name of the target of a message, as it is
 specified by the producer. There are different kinds of targets, varying
 between different message brokers, e. g. queues in RabbitMQ, or topics in
 Kafka.
@@ -383,9 +396,17 @@ is received from can be different from the name of the target a message is sent
 to. If this attribute is used on consumer spans, it should be set to the name
 of the target the message was initially published to by the producer.
 
-##### `messaging.destination.template`
+**[2]:** When available and the same for all messages being sent
 
-In some instances, message destination names are constructed from templates. An
+**[3]:** Different brokers have different concepts of message destinations, the most
+popular being queues and topics. One of the most important differences in
+destination kinds is how messages are settled: messages are settled
+individually in queues, whereas messages are settled based on checkpoints in
+topics. Individual brokers might specify additional destination kinds.
+
+**[4]:** If the message destination is either a `queue` or `topic`.
+
+**[5]:** In some instances, message destination names are constructed from templates. An
 example would be a destination name involving a user name or product id.
 Although the destination name in this case is of high cardinality, the
 underlying template is of low cardinality and can be effectively used for
@@ -394,29 +415,50 @@ grouping and searching spans.
 This attribute is optional, but recommended if the destination name is created
 based on such a template.
 
-##### `messaging.destination.kind`
+**[6]:** when supported by messaging system and only if the destination is temporary. If missing, assumed to be false.
 
-Different brokers have different concepts of message destinations, the most
-popular being queues and topics. One of the most important differences in
-destination kinds is how messages are settled: messages are settled
-individually in queues, whereas messages are settled based on checkpoints in
-topics. Individual brokers might specify additional destination kinds.
-
-##### `messaging.destination.temporary`
-
-If set to `true`, this flag denotes that the destination is a temporary
+**[7]:** If set to `true`, this flag denotes that the destination is a temporary
 destination and might not exist anymore after messages are processed.
 
-##### `messaging.destination.anonymous`
+**[8]:** when supported by messaging system and only if the destination is anonymous. If missing, assumed to be false.
 
-If set to `true`, this flag denotes that the destination is an anonymous
-destination. Anonymous destinations are usually established just for a
-particular set of producers and consumer. Often such destinations are unnamed
-or have an auto-generated name.
+`messaging.destination.kind` has the following list of well-known values. If one of them applies, then the respective value MUST be used, otherwise a custom value MAY be used.
 
-##### `messaging.source.name`
+| Value  | Description |
+|---|---|
+| `queue` | A message sent to a queue |
+| `topic` | A message sent to a topic |
+<!-- endsemconv -->
 
-The source name defines the name of the source of a message, as
+When publishing batches, SHOULD have links to each message being published:
+
+TODO: event -> link (tooling)
+
+<!-- semconv messaging.link.publish -->
+The event name MUST be `link.to.create`.
+
+| Attribute  | Type | Description  | Examples  | Requirement Level |
+|---|---|---|---|---|
+| `messaging.publish.message_id` | string | A value used by the messaging system as an identifier for the message, represented as a string. | `452a7c7c7c7048c2f887f61572b18fc2` | Recommended |
+| `messaging.publish.destination.name` | string | A string identifying queue, topic, or other entity name within broker | `MyQueue`; `MyTopic` | Conditionally Required: [1] |
+
+**[1]:** If and only if different for multiple messages sent in a single batch.
+<!-- endsemconv -->
+
+##### Consumer
+
+**Receive or deliver**
+
+<!-- semconv messaging.consumer -->
+| Attribute  | Type | Description  | Examples  | Requirement Level |
+|---|---|---|---|---|
+| `messaging.source.name` | string | A string identifying queue, topic, or other entity name within broker [1] | `MyQueue`; `MyTopic` | Conditionally Required: [2] |
+| `messaging.source.kind` | string | The kind of message destination | `queue` | Conditionally Required: [3] |
+| `messaging.source.template` | string | Low cardinality field representing messaging destination | `/customers/{customerId}` | Conditionally Required: when available |
+| `messaging.source.temporary` | boolean | denotes that the source is a temporary source and might not exist anymore after messages are processed |  | Recommended: [4] |
+| `messaging.source.anonymous` | boolean | denotes that the source is an anonymous source (could be unnamed or have auto-generated name) |  | Recommended: [5] |
+
+**[1]:** The source name defines the name of the source of a message, as
 specified by the consumer. There are different kinds of sources, varying
 between message brokers, e. g. queues in RabbitMQ or topics in
 Kafka.
@@ -425,55 +467,66 @@ This attributes is required for consumer spans modelling `deliver`, `receive`,
 or `settle` operations. The name of the source a message is received from can
 be different from the name of the destination a message was sent to.
 
-##### `messaging.source.template`
+**[2]:** When available and the same for all messages being sent
 
-See [`messaging.destination.template`](#messagingdestinationtemplate).
+**[3]:** If the message destination is either a `queue` or `topic`.
 
-##### `messaging.source.kind`
+**[4]:** when supported by messaging system and only if the source is temporary. If missing, assumed to be false.
 
-See [`messaging.destination.kind`](#messagingdestinationkind).
+**[5]:** when supported by messaging system and only if the destination is anonymous. If missing, assumed to be false.
 
-##### `messaging.source.temporary`
+`messaging.source.kind` has the following list of well-known values. If one of them applies, then the respective value MUST be used, otherwise a custom value MAY be used.
 
-See [`messaging.destination.temporary`](#messagingdestinationtemporary).
+| Value  | Description |
+|---|---|
+| `queue` | A message sent to a queue |
+| `topic` | A message sent to a topic |
+<!-- endsemconv -->
 
-##### `messaging.source.anonymous`
+When receiving batches, SHOULD have links to each message being received or delivered:
 
-See [`messaging.destination.anonymous`](#messagingdestinationanonymous).
+TODO: event -> link (tooling)
 
-##### `net.app.protocol.name`
+<!-- semconv messaging.link.consume -->
+The event name MUST be `link.to.create`.
 
-The name of the underlying protocol which is used to publish and receive
-messages. This should specify application layer protocols (e. g. AMQP, MQTT, or
-HTTP) and not transport or network layer protocols (e. g. TCP, UDP, IP).
+| Attribute  | Type | Description  | Examples  | Requirement Level |
+|---|---|---|---|---|
+| `messaging.consumer.message_id` | string | A value used by the messaging system as an identifier for the message, represented as a string. | `452a7c7c7c7048c2f887f61572b18fc2` | Recommended |
+| `messaging.consumer.source.name` | string | A string identifying queue, topic, or other entity name within broker | `MyQueue`; `MyTopic` | Conditionally Required: [1] |
 
-See [Network Transport Attributes](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/semantic_conventions/span-general.md#network-transport-attributes)
-for further details.
+**[1]:** If and only if different for multiple messages received/delivered/settled in a single batch.
+<!-- endsemconv -->
 
-##### `net.app.protocol.version`
+**Settle messages**
 
-The version of the protocol given in [`messagingprotocolname`](#messagingprotocolname),
-if applicable.
+<!-- semconv messaging.consumer.settle.messages -->
+| Attribute  | Type | Description  | Examples  | Requirement Level |
+|---|---|---|---|---|
+| `messaging.todo_settlement_operation` | string | Settlement operation | `complete`; `abandon`; `defer` | Recommended |
+<!-- endsemconv -->
 
-See [Network Transport Attributes](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/semantic_conventions/span-general.md#network-transport-attributes)
-for further details.
+TODO: event -> link (tooling)
+When settling messages in batches, SHOULD have links to each message being settled:
 
-##### `net.peer.ip`
+<!-- semconv messaging.link.consume -->
+The event name MUST be `link.to.create`.
 
-This should be the remote address (dotted decimal for IPv4 or [RFC5952](https://datatracker.ietf.org/doc/html/rfc5952)
-of the broker or intermediary this specific message is sent to or received
-from.
+| Attribute  | Type | Description  | Examples  | Requirement Level |
+|---|---|---|---|---|
+| `messaging.consumer.message_id` | string | A value used by the messaging system as an identifier for the message, represented as a string. | `452a7c7c7c7048c2f887f61572b18fc2` | Recommended |
+| `messaging.consumer.source.name` | string | A string identifying queue, topic, or other entity name within broker | `MyQueue`; `MyTopic` | Conditionally Required: [1] |
 
-See [Network Transport Attributes](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/semantic_conventions/span-general.md#network-transport-attributes)
-for further details.
+**[1]:** If and only if different for multiple messages received/delivered/settled in a single batch.
+<!-- endsemconv -->
 
-##### `net.peer.name`
+**Settle offset**
 
-This should be the host name of the broker or intermediary this specific
-message is sent to or received from.
-
-See [Network Transport Attributes](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/semantic_conventions/span-general.md#network-transport-attributes)
-for further details.
+<!-- semconv messaging.consumer.settle.offset -->
+| Attribute  | Type | Description  | Examples  | Requirement Level |
+|---|---|---|---|---|
+| `messaging.todo_offset` | int | Offset |  | Recommended |
+<!-- endsemconv -->
 
 ### System-specific extensions
 

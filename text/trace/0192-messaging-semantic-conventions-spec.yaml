@@ -1,0 +1,270 @@
+groups:
+  - id: messaging
+    prefix: messaging
+    type: span
+    brief: >
+        This document defines the attributes used in
+        messaging systems.
+    attributes:
+      - id: system
+        type: string
+        requirement_level: required
+        brief: 'A string identifying the messaging system.'
+        examples: ['kafka', 'rabbitmq', 'rocketmq', 'activemq', 'AmazonSQS']
+        note: |        
+              A string identifying the messaging broker or intermediary, e. g. `kafka`,
+              `rabbitmq`, `rocketmq`, `AzureEventHubs`, or `AmazonSQS`.
+
+              If the messaging broker or intermediary are not known, this should be set to a
+              value that best identifies the usage scenario. This could be the messaging
+              library used (e. g. `jms`), or the protocol used (e. g. `amqp`).
+
+              A list of recommended values will be provided independently of the messaging
+              semantic conventions document.
+      - id: operation
+        requirement_level: required
+        brief: 'This attribute should be set to one of the [pre-defined operation names](#operation-names).'
+        type:
+          allow_custom_values: true
+          members:
+            - id: publish
+              value: 'publish'
+              brief: One ore more messages are provided for publishing to an intermediary.'
+            - id: create
+              value: 'create'
+              brief: 'A message is created.'
+            - id: receive
+              value: 'receive'
+              brief: 'One or more messages are requested by a consumer.'
+            - id: deliver
+              value: 'deliver'
+              brief: 'One or more message are passed to a consumer.'
+            - id: settle
+              value: 'settle'
+              brief: 'One or more message are settled.'
+
+  - id: messaging.common
+    prefix: messaging
+    type: span
+    extends: messaging
+    brief: >
+        This document defines the attributes used in
+        messaging systems.
+    attributes:
+      - ref: net.peer.name
+        note: >
+          This should be the hostname of the broker this specific operation is performed for.
+        requirement_level:
+          conditionally_required: If available and not explicitly disabled by users.
+      - ref: net.peer.port
+        note: >
+          This should be the port of the broker this specific operation is performed for.
+        requirement_level:
+          conditionally_required: If available, if not default for the network protocol used and not explicitly disabled by users.
+      - ref: net.sock.peer.addr
+      - ref: net.sock.peer.port
+      - ref: net.sock.family
+      - ref: net.sock.peer.name
+        requirement_level:
+          recommended: If different than `net.peer.name` and if `net.sock.peer.addr` is set.
+      - ref: net.app.protocol.name
+      - ref: net.app.protocol.version
+    constraints:
+      - include: network
+
+  - id: messaging.link.publish
+    prefix: messaging.publish
+    name: 'link.to.create' # links not supported by otel schema
+    type: event # links not supported
+    brief: 'Link describing each message being published.'
+    attributes:
+      - id: message_id 
+        type: string
+        brief: 'A value used by the messaging system as an identifier for the message, represented as a string.'
+        examples: '452a7c7c7c7048c2f887f61572b18fc2'
+      - id: destination.name
+        type: string
+        requirement_level:
+          conditionally_required: If and only if different for multiple messages sent in a single batch.
+        brief: 'A string identifying queue, topic, or other entity name within broker'
+        examples: ['MyQueue', 'MyTopic']
+
+  - id: messaging.link.consume
+    prefix: messaging.consumer
+    name: 'link.to.create' # links not supported by otel schema
+    type: event # links not supported
+    brief: 'Link describing each message being received/delivered/settled.'
+    attributes:
+      - id: message_id 
+        type: string
+        brief: 'A value used by the messaging system as an identifier for the message, represented as a string.'
+        examples: '452a7c7c7c7048c2f887f61572b18fc2'
+      - id: source.name
+        type: string
+        requirement_level:
+          conditionally_required: If and only if different for multiple messages received/delivered/settled in a single batch.
+        brief: 'A string identifying queue, topic, or other entity name within broker'
+        examples: ['MyQueue', 'MyTopic']
+
+  - id: messaging.publish
+    prefix: messaging
+    type: span
+    extends: messaging.common
+    brief: 'Semantic convention for producer of messages applying to publish call instrumentation only'
+    attributes:
+      - id: destination.name
+        type: string
+        requirement_level:
+          conditionally_required: When available and the same for all messages being sent
+        brief: 'A string identifying queue, topic, or other entity name within broker'
+        examples: ['MyQueue', 'MyTopic']
+        note: |
+          The destination name defines name of the target of a message, as it is
+          specified by the producer. There are different kinds of targets, varying
+          between different message brokers, e. g. queues in RabbitMQ, or topics in
+          Kafka.
+
+          This attributes is required for producer spans modelling `publish` or `create`
+          operations. It is optional for consumer spans. The name of the source a message
+          is received from can be different from the name of the target a message is sent
+          to. If this attribute is used on consumer spans, it should be set to the name
+          of the target the message was initially published to by the producer.
+      - id: destination.kind
+        type:
+          allow_custom_values: true
+          members:
+            - id: queue
+              value: "queue"
+              brief: "A message sent to a queue"
+            - id: topic
+              value: "topic"
+              brief: "A message sent to a topic"
+        requirement_level:
+          conditionally_required: If the message destination is either a `queue` or `topic`.
+        brief: 'The kind of message destination'
+        note: | 
+          Different brokers have different concepts of message destinations, the most
+          popular being queues and topics. One of the most important differences in
+          destination kinds is how messages are settled: messages are settled
+          individually in queues, whereas messages are settled based on checkpoints in
+          topics. Individual brokers might specify additional destination kinds.
+      - id: destination.template
+        type: string
+        requirement_level:
+          conditionally_required: when available
+        brief: 'Low cardinality field representing messaging destination'
+        examples: ['/customers/{customerId}']
+        note: | 
+          In some instances, message destination names are constructed from templates. An
+          example would be a destination name involving a user name or product id.
+          Although the destination name in this case is of high cardinality, the
+          underlying template is of low cardinality and can be effectively used for
+          grouping and searching spans.
+
+          This attribute is optional, but recommended if the destination name is created
+          based on such a template.
+      - id: destination.temporary
+        type: boolean
+        requirement_level:
+          recommended: when supported by messaging system and only if the destination is temporary. If missing, assumed to be false.
+        brief: 'denotes that the destination is a temporary destination and might not exist anymore after messages are processed'
+      - id: destination.anonymous
+        type: boolean
+        requirement_level:
+          recommended: when supported by messaging system and only if the destination is anonymous. If missing, assumed to be false.
+        brief: 'denotes that the destination is an anonymous destination (could be unnamed or have auto-generated name)'
+        note: |
+          If set to `true`, this flag denotes that the destination is a temporary
+          destination and might not exist anymore after messages are processed.
+    events: [messaging.link.publish]
+
+
+  - id: messaging.publish_and_create
+    prefix: messaging
+    type: span
+    extends: messaging.publish
+    span_kind: producer
+    brief: 'Semantic convention for producer of messages applying to publish call instrumentation that does not instrument message creation calls'
+
+  - id: messaging.create
+    prefix: messaging
+    extends: messaging
+    type: span # or context
+    span_kind: producer # if span, otherwise, publish will be producer
+    brief: 'Semantic convention for producer of messages applying to message creation calls only'
+
+  - id: messaging.consumer
+    prefix: messaging
+    type: span
+    extends: messaging.common
+    span_kind: consumer
+    brief: 'Semantic convention for a consumer of messages received from a messaging system'
+    attributes:
+      - id: source.name
+        type: string
+        requirement_level:
+          conditionally_required: When available and the same for all messages being sent
+        brief: 'A string identifying queue, topic, or other entity name within broker'
+        examples: ['MyQueue', 'MyTopic']
+        note: | 
+          The source name defines the name of the source of a message, as
+          specified by the consumer. There are different kinds of sources, varying
+          between message brokers, e. g. queues in RabbitMQ or topics in
+          Kafka.
+
+          This attributes is required for consumer spans modelling `deliver`, `receive`,
+          or `settle` operations. The name of the source a message is received from can
+          be different from the name of the destination a message was sent to.
+      - id: source.kind
+        type:
+          allow_custom_values: true
+          members:
+            - id: queue
+              value: "queue"
+              brief: "A message sent to a queue"
+            - id: topic
+              value: "topic"
+              brief: "A message sent to a topic"
+        requirement_level:
+          conditionally_required: If the message destination is either a `queue` or `topic`.
+        brief: 'The kind of message destination'
+      - id: source.template
+        type: string
+        requirement_level:
+          conditionally_required: when available
+        brief: 'Low cardinality field representing messaging destination'
+        examples: ['/customers/{customerId}']
+      - id: source.temporary
+        type: boolean
+        requirement_level:
+          recommended: when supported by messaging system and only if the source is temporary. If missing, assumed to be false.
+        brief: 'denotes that the source is a temporary source and might not exist anymore after messages are processed'
+      - id: source.anonymous
+        type: boolean
+        requirement_level:
+          recommended: when supported by messaging system and only if the destination is anonymous. If missing, assumed to be false.
+        brief: 'denotes that the source is an anonymous source (could be unnamed or have auto-generated name)'
+    events: [messaging.link.consume] 
+
+  - id: messaging.consumer.settle.messages
+    prefix: messaging
+    type: span
+    extends: messaging.common
+    span_kind: internal
+    brief: 'Semantic convention for settling individual messages'
+    events: [messaging.link.consume]
+    attributes:
+      - id: todo_settlement_operation
+        type: string
+        brief: 'Settlement operation'
+        examples: ['complete', 'abandon', 'defer']
+  - id: messaging.consumer.settle.offset
+    prefix: messaging
+    type: span
+    extends: messaging.common
+    span_kind: internal
+    brief: 'Semantic convention for settling by offset'
+    attributes:
+      - id: todo_offset
+        type: int
+        brief: 'Offset'
