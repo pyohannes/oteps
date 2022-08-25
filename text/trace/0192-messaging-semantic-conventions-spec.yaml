@@ -51,6 +51,8 @@ groups:
         This document defines the attributes used in
         messaging systems.
     attributes:
+      - ref: messaging.system
+      - ref: messaging.operation
       - ref: net.peer.name
         note: >
           This should be the hostname of the broker this specific operation is performed for.
@@ -69,66 +71,59 @@ groups:
           recommended: If different than `net.peer.name` and if `net.sock.peer.addr` is set.
       - ref: net.app.protocol.name
       - ref: net.app.protocol.version
+      - id: batch_size
+        type: int
+        requirement_level:
+          conditionally_required: If bigger than 1.
+        brief: 'Count of messages in a batch that are being published.'
+        examples: [1, 42]
     constraints:
       - include: network
 
-  - id: messaging.link.publish
-    prefix: messaging.publish
-    name: 'link.to.create' # links not supported by otel schema
-    type: event # links not supported
-    brief: 'Link describing each message being published.'
+  - id: messaging.message.attributes.producer
+    prefix: messaging.message
+    type: span # todo: support attribute groups
+    brief: 'Attributes describing individual messages on producer side, could be added on links or publish/consumer spans.'
     attributes:
-      - id: message_id 
+      - id: id
         type: string
         brief: 'A value used by the messaging system as an identifier for the message, represented as a string.'
-        examples: '452a7c7c7c7048c2f887f61572b18fc2'
-      - id: destination.name
+        examples: ['452a7c7c7c7048c2f887f61572b18fc2']
+        note: Could be set either on link or on producer/consumer/settle span, but not on both
+      - id: correlation_id
         type: string
-        requirement_level:
-          conditionally_required: If and only if different for multiple messages sent in a single batch.
-        brief: 'A string identifying queue, topic, or other entity name within broker'
-        examples: ['MyQueue', 'MyTopic']
+        brief: 'A value used by application to correlate request and responses, represented as a string.'
+        examples: ['1452a7c7c7c7048c2f887f61572b18fc']
+        note: Could be set either on link or on producer/consumer/settle span, but not on both
+      - id: timestamp
+        type: int
+        brief: 'Message timestamp that matches either creation time or enqueued time. The earliest time available should be used. MUST be absolute Unix epoch time.'
+        examples: [1661407697]
+        note: Could be set either on link or on producer/consumer/settle span, but not on both
 
-  - id: messaging.link.consume
-    prefix: messaging.consumer
-    name: 'link.to.create' # links not supported by otel schema
+
+  - id: messaging.link.publish
+    prefix: messaging
+    name: 'messaging.link.publish' # links not supported by otel schema
     type: event # links not supported
     brief: 'Link describing each message being received/delivered/settled.'
     attributes:
-      - id: message_id 
-        type: string
-        brief: 'A value used by the messaging system as an identifier for the message, represented as a string.'
-        examples: '452a7c7c7c7048c2f887f61572b18fc2'
-      - id: source.name
-        type: string
-        requirement_level:
-          conditionally_required: If and only if different for multiple messages received/delivered/settled in a single batch.
-        brief: 'A string identifying queue, topic, or other entity name within broker'
-        examples: ['MyQueue', 'MyTopic']
+      - ref: messaging.message.id
+      - ref: messaging.message.correlation_id
+      - ref: messaging.message.timestamp
 
   - id: messaging.publish
     prefix: messaging
     type: span
     extends: messaging.common
-    brief: 'Semantic convention for producer of messages applying to publish call instrumentation only'
+    brief: 'Semantic convention for producer of messages applying to publish call instrumentation when a single message is being published'
     attributes:
       - id: destination.name
         type: string
         requirement_level:
-          conditionally_required: When available and the same for all messages being sent
+          conditionally_required: If and only if different for multiple messages sent in a single batch.
         brief: 'A string identifying queue, topic, or other entity name within broker'
-        examples: ['MyQueue', 'MyTopic']
-        note: |
-          The destination name defines name of the target of a message, as it is
-          specified by the producer. There are different kinds of targets, varying
-          between different message brokers, e. g. queues in RabbitMQ, or topics in
-          Kafka.
-
-          This attributes is required for producer spans modelling `publish` or `create`
-          operations. It is optional for consumer spans. The name of the source a message
-          is received from can be different from the name of the target a message is sent
-          to. If this attribute is used on consumer spans, it should be set to the name
-          of the target the message was initially published to by the producer.
+        examples: ['MyQueue', 'MyTopic']      
       - id: destination.kind
         type:
           allow_custom_values: true
@@ -176,15 +171,17 @@ groups:
         note: |
           If set to `true`, this flag denotes that the destination is a temporary
           destination and might not exist anymore after messages are processed.
-    events: [messaging.link.publish]
-
+      - ref: messaging.message.id
+      - ref: messaging.message.correlation_id
+      - ref: messaging.message.timestamp
+    events: [messaging.link.publish] #links
 
   - id: messaging.publish_and_create
     prefix: messaging
     type: span
     extends: messaging.publish
     span_kind: producer
-    brief: 'Semantic convention for producer of messages applying to publish call instrumentation that does not instrument message creation calls'
+    brief: 'Semantic convention for producer of messages applying to publish call instrumentation that does not instrument message creation'
 
   - id: messaging.create
     prefix: messaging
@@ -192,6 +189,29 @@ groups:
     type: span # or context
     span_kind: producer # if span, otherwise, publish will be producer
     brief: 'Semantic convention for producer of messages applying to message creation calls only'
+
+  - id: messaging.message.attributes.consumer
+    prefix: messaging.message
+    type: span # todo: support attribute groups
+    extends: 'messaging.message.attributes.producer'
+    brief: 'Attributes describing individual messages on producer side, could be added on links or publish/consumer spans.'
+    attributes:
+      - id: redelivered
+        type: boolean
+        brief: 'Indicates if message was already delivered to a consumer.'
+        examples: [true]
+        note: Could be set either on link or on producer/consumer/settle span, but not on both
+
+  - id: messaging.link.consume
+    prefix: messaging.message
+    name: 'messaging.link.consume' # links not supported by otel schema
+    type: event # links not supported
+    brief: 'Link describing each message being received/delivered/settled.'
+    attributes:
+      - ref: messaging.message.id
+      - ref: messaging.message.correlation_id
+      - ref: messaging.message.timestamp
+      - ref: messaging.message.redelivered
 
   - id: messaging.consumer
     prefix: messaging
@@ -214,7 +234,7 @@ groups:
 
           This attributes is required for consumer spans modelling `deliver`, `receive`,
           or `settle` operations. The name of the source a message is received from can
-          be different from the name of the destination a message was sent to.
+          be different from the name of the destination a message was sent to.    
       - id: source.kind
         type:
           allow_custom_values: true
@@ -244,7 +264,11 @@ groups:
         requirement_level:
           recommended: when supported by messaging system and only if the destination is anonymous. If missing, assumed to be false.
         brief: 'denotes that the source is an anonymous source (could be unnamed or have auto-generated name)'
-    events: [messaging.link.consume] 
+      - ref: messaging.message.id
+      - ref: messaging.message.correlation_id
+      - ref: messaging.message.timestamp
+      - ref: messaging.message.redelivered
+    events: [messaging.link.consume] #links
 
   - id: messaging.consumer.settle.messages
     prefix: messaging
@@ -252,12 +276,17 @@ groups:
     extends: messaging.common
     span_kind: internal
     brief: 'Semantic convention for settling individual messages'
-    events: [messaging.link.consume]
     attributes:
       - id: todo_settlement_operation
         type: string
         brief: 'Settlement operation'
         examples: ['complete', 'abandon', 'defer']
+      - ref: messaging.message.id
+      - ref: messaging.message.correlation_id
+      - ref: messaging.message.timestamp
+      - ref: messaging.message.redelivered
+    events: [messaging.link.consume]  #links
+
   - id: messaging.consumer.settle.offset
     prefix: messaging
     type: span
