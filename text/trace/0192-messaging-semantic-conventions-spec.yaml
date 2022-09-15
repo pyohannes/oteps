@@ -55,7 +55,7 @@ groups:
       - ref: messaging.operation
       - ref: net.peer.name
         note: >
-          This should be the hostname of the broker this specific operation is performed for.
+          This should be the hostname of the broker this specific operation is performed against.
         requirement_level:
           conditionally_required: If available and not explicitly disabled by users.
       - ref: net.peer.port
@@ -71,12 +71,16 @@ groups:
           recommended: If different than `net.peer.name` and if `net.sock.peer.addr` is set.
       - ref: net.app.protocol.name
       - ref: net.app.protocol.version
-      - id: batch_size
+      - id: batch.size
         type: int
+        brief: The number of messages sent, received, or processed in the scope of the batching operation.
         requirement_level:
-          conditionally_required: If bigger than 1.
-        brief: 'Count of messages in a batch that are being published.'
-        examples: [1, 42]
+          conditionally_required: >
+            If available within the messaging system, and only if the span describes operations that operate with message batches.
+        note: >
+            Instrumentation SHOULD always set it on batch `receive` operations regardless
+            of the actual number of received messages (e.g. 0, 1, or more).
+        examples: [0, 1, 2]
     constraints:
       - include: network
 
@@ -121,8 +125,12 @@ groups:
       - id: destination.name
         type: string
         requirement_level:
-          conditionally_required: If and only if different for multiple messages sent in a single batch.
-        brief: 'A string identifying queue, topic, or other entity name within broker'
+          conditionally_required: If available and only if different for multiple messages sent in a single batch.
+        brief: 'A string identifying queue, topic, or other entity name within a broker or globally.'
+        note: |
+          If messages in a batch have different `messaging.destination.name` it MUST
+          be populated on each corresponding link to message context. Otherwise it MUST be populated on 
+          publish span.
         examples: ['MyQueue', 'MyTopic']      
       - id: destination.kind
         type:
@@ -193,7 +201,7 @@ groups:
   - id: messaging.message.attributes.consumer
     prefix: messaging.message
     type: span # todo: support attribute groups
-    extends: 'messaging.message.attributes.producer'
+    extends: messaging.message.attributes.producer
     brief: 'Attributes describing individual messages on producer side, could be added on links or publish/consumer spans.'
     attributes:
       - id: redelivered
@@ -223,8 +231,8 @@ groups:
       - id: source.name
         type: string
         requirement_level:
-          conditionally_required: When available and the same for all messages being sent
-        brief: 'A string identifying queue, topic, or other entity name within broker'
+          conditionally_required: When available and the same for all messages being sent.
+        brief: 'A string identifying queue, topic, or other entity name within broker or globally'
         examples: ['MyQueue', 'MyTopic']
         note: | 
           The source name defines the name of the source of a message, as
@@ -235,6 +243,10 @@ groups:
           This attributes is required for consumer spans modelling `deliver`, `receive`,
           or `settle` operations. The name of the source a message is received from can
           be different from the name of the destination a message was sent to.    
+
+          If messages in a batch have different `messaging.source.name`, it MUST
+          be populated on each corresponding link to message context. Otherwise it MUST be populated on 
+          consumer span.          
       - id: source.kind
         type:
           allow_custom_values: true

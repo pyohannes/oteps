@@ -340,19 +340,23 @@ linked traces without the need of additional semantic hints.
 <!-- semconv messaging.common -->
 | Attribute  | Type | Description  | Examples  | Requirement Level |
 |---|---|---|---|---|
-| `messaging.batch_size` | int | Count of messages in a batch that are being published. | `1`; `42` | Conditionally Required: If bigger than 1. |
+| `messaging.batch.size` | int | The number of messages sent, received, or processed in the scope of the batching operation. [1] | `0`; `1`; `2` | Conditionally Required: [2] |
 | `messaging.operation` | string | This attribute should be set to one of the [pre-defined operation names](#operation-names). | `publish` | Required |
-| `messaging.system` | string | A string identifying the messaging system. [1] | `kafka`; `rabbitmq`; `rocketmq`; `activemq`; `AmazonSQS` | Required |
+| `messaging.system` | string | A string identifying the messaging system. [3] | `kafka`; `rabbitmq`; `rocketmq`; `activemq`; `AmazonSQS` | Required |
 | [`net.app.protocol.name`](span-general.md) | string | Application layer protocol used. The value SHOULD be normalized to lowercase. | `amqp`; `http`; `mqtt` | Recommended |
-| [`net.app.protocol.version`](span-general.md) | string | Version of the application layer protocol used. See note below. [2] | `3.1.1` | Recommended |
-| [`net.peer.name`](span-general.md) | string | Logical remote hostname, see note below. [3] | `example.com` | Conditionally Required: [4] |
-| [`net.peer.port`](span-general.md) | int | Logical remote port number [5] | `80`; `8080`; `443` | Conditionally Required: [6] |
-| [`net.sock.family`](span-general.md) | string | Protocol [address family](https://man7.org/linux/man-pages/man7/address_families.7.html) which is used for communication. | `inet6`; `bluetooth` | Conditionally Required: [7] |
+| [`net.app.protocol.version`](span-general.md) | string | Version of the application layer protocol used. See note below. [4] | `3.1.1` | Recommended |
+| [`net.peer.name`](span-general.md) | string | Logical remote hostname, see note below. [5] | `example.com` | Conditionally Required: [6] |
+| [`net.peer.port`](span-general.md) | int | Logical remote port number [7] | `80`; `8080`; `443` | Conditionally Required: [8] |
+| [`net.sock.family`](span-general.md) | string | Protocol [address family](https://man7.org/linux/man-pages/man7/address_families.7.html) which is used for communication. | `inet6`; `bluetooth` | Conditionally Required: [9] |
 | [`net.sock.peer.addr`](span-general.md) | string | Remote socket peer address: IPv4 or IPv6 for internet protocols, path for local communication, [etc](https://man7.org/linux/man-pages/man7/address_families.7.html). | `127.0.0.1`; `/tmp/mysql.sock` | Recommended |
-| [`net.sock.peer.name`](span-general.md) | string | Remote socket peer name. | `proxy.example.com` | Recommended: [8] |
-| [`net.sock.peer.port`](span-general.md) | int | Remote socket peer port. | `16456` | Recommended: [9] |
+| [`net.sock.peer.name`](span-general.md) | string | Remote socket peer name. | `proxy.example.com` | Recommended: [10] |
+| [`net.sock.peer.port`](span-general.md) | int | Remote socket peer port. | `16456` | Recommended: [11] |
 
-**[1]:** A string identifying the messaging broker or intermediary, e. g. `kafka`,
+**[1]:** Instrumentation SHOULD always set it on batch `receive` operations regardless of the actual number of received messages (e.g. 0, 1, or more).
+
+**[2]:** If available within the messaging system, and only if the span describes operations that operate with message batches.
+
+**[3]:** A string identifying the messaging broker or intermediary, e. g. `kafka`,
 `rabbitmq`, `rocketmq`, `AzureEventHubs`, or `AmazonSQS`.
 
 If the messaging broker or intermediary are not known, this should be set to a
@@ -362,21 +366,21 @@ library used (e. g. `jms`), or the protocol used (e. g. `amqp`).
 A list of recommended values will be provided independently of the messaging
 semantic conventions document.
 
-**[2]:** `net.app.protocol.version` refers to the version of the protocol used and might be different from the protocol client's version. If the HTTP client used has a version of `0.27.2`, but sends HTTP version `1.1`, this attribute should be set to `1.1`.
+**[4]:** `net.app.protocol.version` refers to the version of the protocol used and might be different from the protocol client's version. If the HTTP client used has a version of `0.27.2`, but sends HTTP version `1.1`, this attribute should be set to `1.1`.
 
-**[3]:** This should be the hostname of the broker this specific operation is performed for.
+**[5]:** This should be the hostname of the broker this specific operation is performed against.
 
-**[4]:** If available and not explicitly disabled by users.
+**[6]:** If available and not explicitly disabled by users.
 
-**[5]:** This should be the port of the broker this specific operation is performed for.
+**[7]:** This should be the port of the broker this specific operation is performed for.
 
-**[6]:** If available, if not default for the network protocol used and not explicitly disabled by users.
+**[8]:** If available, if not default for the network protocol used and not explicitly disabled by users.
 
-**[7]:** If different than `inet` and if any of `net.sock.peer.addr` or `net.sock.host.addr` are set. Consumers of telemetry SHOULD accept both IPv4 and IPv6 formats for the address in `net.sock.peer.addr` if `net.sock.family` is not set. This is to support instrumentations that follow previous versions of this document.
+**[9]:** If different than `inet` and if any of `net.sock.peer.addr` or `net.sock.host.addr` are set. Consumers of telemetry SHOULD accept both IPv4 and IPv6 formats for the address in `net.sock.peer.addr` if `net.sock.family` is not set. This is to support instrumentations that follow previous versions of this document.
 
-**[8]:** If different than `net.peer.name` and if `net.sock.peer.addr` is set.
+**[10]:** If different than `net.peer.name` and if `net.sock.peer.addr` is set.
 
-**[9]:** If defined for the address family and if different than `net.peer.port` and if `net.sock.peer.addr` is set.
+**[11]:** If defined for the address family and if different than `net.peer.port` and if `net.sock.peer.addr` is set.
 <!-- endsemconv -->
 
 ##### Producer
@@ -392,26 +396,30 @@ semantic conventions document.
 <!-- semconv messaging.publish -->
 | Attribute  | Type | Description  | Examples  | Requirement Level |
 |---|---|---|---|---|
-| `messaging.destination.name` | string | A string identifying queue, topic, or other entity name within broker | `MyQueue`; `MyTopic` | Conditionally Required: [1] |
-| `messaging.destination.kind` | string | The kind of message destination [2] | `queue` | Conditionally Required: [3] |
-| `messaging.destination.template` | string | Low cardinality field representing messaging destination [4] | `/customers/{customerId}` | Conditionally Required: when available |
-| `messaging.destination.temporary` | boolean | denotes that the destination is a temporary destination and might not exist anymore after messages are processed |  | Recommended: [5] |
-| `messaging.destination.anonymous` | boolean | denotes that the destination is an anonymous destination (could be unnamed or have auto-generated name) [6] |  | Recommended: [7] |
-| `messaging.message.correlation_id` | string | A value used by application to correlate request and responses, represented as a string. [8] | `1452a7c7c7c7048c2f887f61572b18fc` | Recommended |
-| `messaging.message.id` | string | A value used by the messaging system as an identifier for the message, represented as a string. [9] | `452a7c7c7c7048c2f887f61572b18fc2` | Recommended |
-| `messaging.message.timestamp` | int | Message timestamp that matches either creation time or enqueued time. The earliest time available should be used. MUST be absolute Unix epoch time. [10] | `1661407697` | Recommended |
+| `messaging.destination.name` | string | A string identifying queue, topic, or other entity name within a broker or globally. [1] | `MyQueue`; `MyTopic` | Conditionally Required: [2] |
+| `messaging.destination.kind` | string | The kind of message destination [3] | `queue` | Conditionally Required: [4] |
+| `messaging.destination.template` | string | Low cardinality field representing messaging destination [5] | `/customers/{customerId}` | Conditionally Required: when available |
+| `messaging.destination.temporary` | boolean | denotes that the destination is a temporary destination and might not exist anymore after messages are processed |  | Recommended: [6] |
+| `messaging.destination.anonymous` | boolean | denotes that the destination is an anonymous destination (could be unnamed or have auto-generated name) [7] |  | Recommended: [8] |
+| `messaging.message.correlation_id` | string | A value used by application to correlate request and responses, represented as a string. [9] | `1452a7c7c7c7048c2f887f61572b18fc` | Recommended |
+| `messaging.message.id` | string | A value used by the messaging system as an identifier for the message, represented as a string. [10] | `452a7c7c7c7048c2f887f61572b18fc2` | Recommended |
+| `messaging.message.timestamp` | int | Message timestamp that matches either creation time or enqueued time. The earliest time available should be used. MUST be absolute Unix epoch time. [11] | `1661407697` | Recommended |
 
-**[1]:** If and only if different for multiple messages sent in a single batch.
+**[1]:** If messages in a batch have different `messaging.destination.name` it MUST
+be populated on each corresponding link to message context. Otherwise it MUST be populated on 
+publish span.
 
-**[2]:** Different brokers have different concepts of message destinations, the most
+**[2]:** If available and only if different for multiple messages sent in a single batch.
+
+**[3]:** Different brokers have different concepts of message destinations, the most
 popular being queues and topics. One of the most important differences in
 destination kinds is how messages are settled: messages are settled
 individually in queues, whereas messages are settled based on checkpoints in
 topics. Individual brokers might specify additional destination kinds.
 
-**[3]:** If the message destination is either a `queue` or `topic`.
+**[4]:** If the message destination is either a `queue` or `topic`.
 
-**[4]:** In some instances, message destination names are constructed from templates. An
+**[5]:** In some instances, message destination names are constructed from templates. An
 example would be a destination name involving a user name or product id.
 Although the destination name in this case is of high cardinality, the
 underlying template is of low cardinality and can be effectively used for
@@ -420,18 +428,18 @@ grouping and searching spans.
 This attribute is optional, but recommended if the destination name is created
 based on such a template.
 
-**[5]:** when supported by messaging system and only if the destination is temporary. If missing, assumed to be false.
+**[6]:** when supported by messaging system and only if the destination is temporary. If missing, assumed to be false.
 
-**[6]:** If set to `true`, this flag denotes that the destination is a temporary
+**[7]:** If set to `true`, this flag denotes that the destination is a temporary
 destination and might not exist anymore after messages are processed.
 
-**[7]:** when supported by messaging system and only if the destination is anonymous. If missing, assumed to be false.
-
-**[8]:** Could be set either on link or on producer/consumer/settle span, but not on both
+**[8]:** when supported by messaging system and only if the destination is anonymous. If missing, assumed to be false.
 
 **[9]:** Could be set either on link or on producer/consumer/settle span, but not on both
 
 **[10]:** Could be set either on link or on producer/consumer/settle span, but not on both
+
+**[11]:** Could be set either on link or on producer/consumer/settle span, but not on both
 
 `messaging.destination.kind` has the following list of well-known values. If one of them applies, then the respective value MUST be used, otherwise a custom value MAY be used.
 
@@ -468,7 +476,7 @@ The event name MUST be `messaging.link.publish`.
 <!-- semconv messaging.consumer -->
 | Attribute  | Type | Description  | Examples  | Requirement Level |
 |---|---|---|---|---|
-| `messaging.source.name` | string | A string identifying queue, topic, or other entity name within broker [1] | `MyQueue`; `MyTopic` | Conditionally Required: [2] |
+| `messaging.source.name` | string | A string identifying queue, topic, or other entity name within broker or globally [1] | `MyQueue`; `MyTopic` | Conditionally Required: [2] |
 | `messaging.source.kind` | string | The kind of message destination | `queue` | Conditionally Required: [3] |
 | `messaging.source.template` | string | Low cardinality field representing messaging destination | `/customers/{customerId}` | Conditionally Required: when available |
 | `messaging.source.temporary` | boolean | denotes that the source is a temporary source and might not exist anymore after messages are processed |  | Recommended: [4] |
@@ -485,9 +493,13 @@ Kafka.
 
 This attributes is required for consumer spans modelling `deliver`, `receive`,
 or `settle` operations. The name of the source a message is received from can
-be different from the name of the destination a message was sent to.
+be different from the name of the destination a message was sent to.    
 
-**[2]:** When available and the same for all messages being sent
+If messages in a batch have different `messaging.source.name`, it MUST
+be populated on each corresponding link to message context. Otherwise it MUST be populated on 
+consumer span.
+
+**[2]:** When available and the same for all messages being sent.
 
 **[3]:** If the message destination is either a `queue` or `topic`.
 
