@@ -346,35 +346,38 @@ A producer creates and publishes a single message, the single message is deliver
 
 ```mermaid
 flowchart LR;
-  subgraph PRODUCER
-  PM1[Publish m1]
-  end
   subgraph CONSUMER
   DM1[Deliver m1]
   end
-  PM1-. link .->DM1;
-
+  subgraph PRODUCER
+  PM1[Publish m1]
+  end
+  PM1 --- DM1 .-> |link|PM1
+  DM1 --- PM1
   classDef normal fill:green
   class PM1,DM1 normal
-  linkStyle 0 color:green,stroke:green
+  linkStyle 0,2 stroke:none
+  linkStyle 1 color:green,stroke:green
 ```
 
 When consuming a single message, the "Deliver" spans can be parented to the creation context:
 
 ```mermaid
 flowchart LR;
-  subgraph PRODUCER
-  PM1[Publish m1]
-  end
   subgraph CONSUMER
   DM1[Deliver m1]
   end
-  PM1-. link .->DM1;
-  PM1-->DM1;
-
+  subgraph PRODUCER
+  PM1[Publish m1]
+  end
+  PM1 --- DM1 .-> |link|PM1
+  DM1 --- PM1
+  PM1 --- DM1 --> |parent|PM1
+  DM1 --- PM1
   classDef normal fill:green
   class PM1,DM1 normal
-  linkStyle 0,1 color:green,stroke:green
+  linkStyle 0,2,3,5 stroke:none
+  linkStyle 1,4 color:green,stroke:green
 ```
 
 It is recommended to add spans for settlement operations. Those spans can
@@ -382,90 +385,103 @@ either be created manually or via auto-instrumentation:
 
 ```mermaid
 flowchart LR;
+  subgraph CONSUMER
+    direction TB
+    DM1[Deliver m1] --- S1[Settle m1] -->|parent|DM1
+    S1[Settle m1] --- DM1
+  end
   subgraph PRODUCER
     direction TB
     PM1[Publish m1]
   end
-  subgraph CONSUMER
-    direction TB
-    DM1[Deliver m1]-->S1[Settle m1]
-  end
-  PM1-. link .->DM1;
-  PM1-. link .->S1;
-
+  PM1 --- DM1 .-> |link|PM1
+  DM1 --- PM1
+  PM1 --- S1 .-> |link|PM1
+  S1 --- PM1
   classDef normal fill:green
   class PM1,DM1,S1 normal
-  linkStyle 0,1,2 color:green,stroke:green
+  linkStyle 0,2,3,5,6,8 stroke:none
+  linkStyle 1,4,7 color:green,stroke:green
 ```
 
 A producer publishes a batch of messages, single messages are delivered to consumers:
 
 ```mermaid
 flowchart LR;
-  subgraph PRODUCER
-  direction TB
-  P[Publish]
-  end
   subgraph CONSUMER
   direction TB
   DM1[Deliver m1]
   DM2[Deliver m2]
   end
-  P-. link .->DM1;
-  P-. link .->DM2;
-
+  subgraph PRODUCER
+  direction TB
+  P[Publish]
+  end
+  P --- DM1 .-> |link|P
+  DM1 --- P
+  P --- DM2 .-> |link|P
+  DM2 --- P
   classDef normal fill:green
   class P,DM1,DM2 normal
-  linkStyle 0,1 color:green,stroke:green
+  linkStyle 0,2,3,5 stroke:none
+  linkStyle 1,4 color:green,stroke:green
 ```
 
 When consuming a single message, the "Deliver" spans can be parented to the creation context:
 
 ```mermaid
 flowchart LR;
-  subgraph PRODUCER
-  direction TB
-  P[Publish]
-  end
   subgraph CONSUMER
   direction TB
   DM1[Deliver m1]
   DM2[Deliver m2]
   end
-  P-. link .->DM1;
-  P-. link .->DM2;
-  P-->DM1;
-  P-->DM2;
+  subgraph PRODUCER
+  direction TB
+  P[Publish]
+  end
+  P --- DM1 .-> |link|P
+  DM1 --- P
+  P --- DM2 .-> |link|P
+  DM2 --- P
+  P --- DM1 --> |parent|P
+  DM1 --- P
+  P --- DM2 --> |parent|P
+  DM2 --- P
 
   classDef normal fill:green
   class P,DM1,DM2 normal
-  linkStyle 0,1,2,3 color:green,stroke:green
+  linkStyle 0,2,3,5,6,8,9,11 stroke:none
+  linkStyle 1,4,7,10 color:green,stroke:green
 ```
 
 A producer creates and publishes a single message, it is delivered as part of a
 batch of messages to a consumer:
 
 ```mermaid
-flowchart LR;
-  subgraph PRODUCER
-  direction TB
-  PM1[Publish m1]
-  PM2[Publish m2]
-  end
+flowchart TB;
   subgraph CONSUMER
   direction TB
   D[Deliver]-.-PRM1[Process m1]
   D-.-PRM2[Process m2]
   end
-  PM1-. link .->D;
-  PM2-. link .->D;
+  subgraph PRODUCER
+  direction TB
+  PM1[Publish m1]
+  PM2[Publish m2]
+  end
+  PM1 --- D .-> |link|PM1
+  D --- PM1
+  PM2 --- D .-> |link|PM2
+  D --- PM2
 
   classDef normal fill:green
   class PM1,PM2,D normal
   classDef additional opacity:0.4
   class PRM1,PRM2 additional
   linkStyle 0,1 opacity:0.4
-  linkStyle 2,3 color:green,stroke:green
+  linkStyle 2,4,5,7 stroke:none
+  linkStyle 3,6 color:green,stroke:green
 ```
 
 ### Pull-based scenarios
@@ -475,51 +491,62 @@ delivered to a consumer. "Create" spans are created independently of the
 "Publish" operation:
 
 ```mermaid
-flowchart LR;
-  subgraph PRODUCER
-  direction TB
-  A[Ambient]-->CM1[Create m1]
-  A-->CM2[Create m2]
-  A-->P[Publish]
-  end
+flowchart TB;
   subgraph CONSUMER
   direction TB
   RM1[Receive m1]
   RM2[Receive m2]
   end
-  CM1-. link .->RM1;
-  CM2-. link .->RM2;
-  CM1-. link .->P;
-  CM2-. link .->P;
-
+  subgraph PRODUCER
+  direction TB
+  A[Ambient] --- CM1[Create m1] -->|parent|A
+  CM1 --- A
+  A --- CM2[Create m2] -->|parent|A
+  CM2 --- A
+  A --- P[Publish] -->|parent|A
+  P --- A
+  end
+  CM1 --- P .-> |link|CM1
+  P --- CM1
+  CM2 --- P .-> |link|CM2
+  P --- CM2
+  CM1 --- RM1 .-> |link|CM1
+  RM1 --- CM1
+  CM2 --- RM2 .-> |link|CM2
+  RM2 --- CM2
   classDef normal fill:green
   class CM1,CM2,P,RM1,RM2 normal
   classDef additional opacity:0.4
   class A additional
-  linkStyle 0,1,2 opacity:0.4
-  linkStyle 3,4,5,6 color:green,stroke:green
+  linkStyle 1,4,7 opacity:0.4
+  linkStyle 0,2,3,5,6,8,9,11,12,14,15,17,18,20 stroke:none
+  linkStyle 10,13,16,19 color:green,stroke:green
 ```
 
 "Create" spans are created as part of the "Publish" operation:
 
 ```mermaid
-flowchart LR;
-  subgraph PRODUCER
-  direction TB
-  P[Publish]-->CM1[Create m1]
-  P-->CM2[Create m2]
-  end
+flowchart TB;
   subgraph CONSUMER
   direction TB
   RM1[Receive m1]
   RM2[Receive m2]
   end
-  CM1-. link .->RM1;
-  CM2-. link .->RM2;
-
+  subgraph PRODUCER
+  direction LR
+  P[Publish] --- CM1[Create m1] -->|parent|P
+  CM1[Create m1] --- P
+  P[Publish] --- CM2[Create m2] -->|parent|P
+  CM2[Create m2] --- P
+  end
+  CM1 --- RM1 .-> |link|CM1
+  P --- RM1
+  CM2 --- RM2 .-> |link|CM2
+  P --- RM2
   classDef normal fill:green
   class P,CM1,CM2,RM1,RM2 normal
-  linkStyle 0,1,2,3 color:green,stroke:green
+  linkStyle 0,2,3,5,6,8,9,11 stroke:none
+  linkStyle 1,4,7,10 color:green,stroke:green
 ```
 
 A producer creates and publishes a single message, it is delivered as part of a
@@ -528,55 +555,67 @@ created, but are not covered by these conventions:
 
 ```mermaid
 flowchart LR;
-  subgraph PRODUCER
-  direction TB
-  PM1[Publish m1]
-  PM2[Publish m2]
-  end
   subgraph CONSUMER
   direction TB
   A[Ambient]-->R[Receive]
   A-.-PRM1[Process m1]
   A-.-PRM2[Process m2]
   end
-  PM1-. link .->R;
-  PM2-. link .->R;
+  subgraph PRODUCER
+  direction TB
+  PM1[Publish m1]
+  PM2[Publish m2]
+  end
+  PM1 --- R .-> |link|PM1
+  R --- PM1
+  PM2 --- R .-> |link|PM2
+  R --- PM2
 
   classDef normal fill:green
   class PM1,PM2,R normal
   classDef additional opacity:0.4
   class A,PRM1,PRM2 additional
   linkStyle 0,1,2 opacity:0.4
-  linkStyle 3,4 color:green,stroke:green
+  linkStyle 3,5,6,8 stroke:none
+  linkStyle 4,7 color:green,stroke:green
 ```
 
 It is recommended to add spans for settlement operations. Those spans can
 either be created manually or via auto-instrumentation:
 
 ```mermaid
-flowchart LR;
+flowchart TB;
+  subgraph CONSUMER
+  direction TB
+  A[Ambient] --- R[Receive] -->|parent|A
+  R --- A
+  A[Ambient] --- SM1[Settle m1] -->|parent|A
+  SM1 --- A
+  A[Ambient] --- SM2[Settle m2] -->|parent|A
+  SM2 --- A
+  end
   subgraph PRODUCER
   direction TB
   PM1[Publish m1]
   PM2[Publish m2]
   end
-  subgraph CONSUMER
-  direction TB
-  A[Ambient]-->R[Receive]
-  A-->SM1[Settle m1]
-  A-->SM2[Settle m2]
-  end
-  PM1-. link .->R;
-  PM2-. link .->R;
-  PM1-. link .->SM1;
-  PM2-. link .->SM2;
+  PM1 --- R .-> |link|PM1
+  R --- PM1
+  PM2 --- R .-> |link|PM2
+  R --- PM2
+
+  PM1 --- SM1 .-> |link|PM1
+  SM1 --- PM1
+  PM2 --- SM2 .-> |link|PM2
+  SM2 --- PM2
 
   classDef normal fill:green
   class PM1,PM2,SM1,SM2,R normal
   classDef additional opacity:0.4
   class A additional
-  linkStyle 0,1,2 opacity:0.4
-  linkStyle 3,4,5,6 color:green,stroke:green
+  linkStyle 1,4,7 opacity:0.4
+  linkStyle 0,2,3,5,6,8,9,11,12,14,15,17,18,20 stroke:none
+  linkStyle 10,13,16,19 color:green,stroke:green
 ```
 
 ## Future possibilities
@@ -594,7 +633,7 @@ links across all scenarios provides maximal flexibility for adding intermediary
 instrumentation.
 
 ```mermaid
-flowchart LR;
+flowchart TB;
   subgraph PRODUCER
   direction TB
   PM1[Publish m1]
@@ -605,18 +644,25 @@ flowchart LR;
   D[Deliver]-.-PRM1[Process m1]
   D-.-PRM2[Process m2]
   end
-  PM1-. link .->D;
-  PM2-. link .->D;
-  PM1-->INTERMEDIARY;
-  PM2-->INTERMEDIARY;
-  INTERMEDIARY-->D;
+  PM1 --- D .-> |link|PM1
+  D --- PM1
+  PM2 --- D .-> |link|PM2
+  D --- PM2
+  PM1 --- INTERMEDIARY --> |parent|PM1
+  INTERMEDIARY --- PM1
+  PM2 --- INTERMEDIARY --> |parent|PM2
+  INTERMEDIARY --- PM2
+  
+  INTERMEDIARY --- D --> |parent|INTERMEDIARY
+  D --- INTERMEDIARY
 
   classDef normal fill:green
   class PM1,PM2,D normal
   classDef additional opacity:0.4
   class INTERMEDIARY,PRM1,PRM2 additional
-  linkStyle 0,1,4,5,6 opacity:0.4
-  linkStyle 2,3 color:green,stroke:green
+  linkStyle 0,1,9,12,15 opacity:0.4
+  linkStyle 2,4,5,7,8,10,11,13,14,16 stroke:none
+  linkStyle 3,6 color:green,stroke:green
 ```
 
 ### Instrumentation of "Process" operations
